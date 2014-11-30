@@ -1,81 +1,103 @@
-/*****************************************************************
+/***************************************************************************************
+
+	Copyright (C) 2012 BCServ (plugins@bcserv.eu)
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+	
+***************************************************************************************/
+
+/***************************************************************************************
 
 
-C O M P I L E   O P T I O N S
+	C O M P I L E   O P T I O N S
 
 
-*****************************************************************/
+***************************************************************************************/
 // enforce semicolons after each code statement
 #pragma semicolon 1
 
-/*****************************************************************
+/***************************************************************************************
 
 
-P L U G I N   I N C L U D E S
+	P L U G I N   I N C L U D E S
 
 
-*****************************************************************/
+***************************************************************************************/
 #include <sourcemod>
 #include <sdktools>
 #include <smlib>
 #include <smlib/pluginmanager>
 
 
-/*****************************************************************
+/***************************************************************************************
 
 
-P L U G I N   I N F O
+	P L U G I N   I N F O
 
 
-*****************************************************************/
-#define PLUGIN_NAME				"Tick X Map Fix"
-#define PLUGIN_TAG				"sm"
-#define PLUGIN_PRINT_PREFIX		"[SM] "
-#define PLUGIN_AUTHOR			"Chanz"
-#define PLUGIN_DESCRIPTION		"This plugin fixes maps which are made only for tick 66 servers to work under tick 100 servers"
-#define PLUGIN_VERSION 			"2.5.36"
-#define PLUGIN_URL				"http://forums.alliedmods.net/showthread.php?p=1528146"
-
+***************************************************************************************/
 public Plugin:myinfo = {
-	name = PLUGIN_NAME,
-	author = PLUGIN_AUTHOR,
-	description = PLUGIN_DESCRIPTION,
-	version = PLUGIN_VERSION,
-	url = PLUGIN_URL
+	name 						= "Tick X Map Fix",
+	author 						= "Chanz",
+	description 				= "This is a SourceMod plugin, it improves maps which are made only for tick 66 servers to work better on servers with a differnt tickrate",
+	version 					= "3.0",
+	url 						= "http://forums.alliedmods.net/showthread.php?p=1528146"
 }
 
-/*****************************************************************
+/***************************************************************************************
 
 
-P L U G I N   D E F I N E S
+	P L U G I N   D E F I N E S
 
 
-*****************************************************************/
-#define THINK_INTERVAL 10.5
-#define TOP_PRE_TICKRATE_TEXT "Current Tickrate: "
+***************************************************************************************/
 
-/*****************************************************************
+/***************************************************************************************
 
 
-G L O B A L   V A R S
+	G L O B A L   V A R S
 
 
-*****************************************************************/
-//Use a good notation, constants for arrays, initialize everything that has nothing to do with clients!
-//If you use something which requires client index init it within the function Client_InitVars (look below)
-//Example: Bad: "decl servertime" Good: "new g_iServerTime = 0"
-//Example client settings: Bad: "decl saveclientname[33][32] Good: "new g_szClientName[MAXPLAYERS+1][MAX_NAME_LENGTH];" -> later in Client_InitVars: GetClientName(client,g_szClientName,sizeof(g_szClientName));
+***************************************************************************************/
+// Server Variables
 
-//Cvars
+
+// Plugin Internal Variables
+
+
+// Console Variables
+new Handle:g_cvarEnable 					= INVALID_HANDLE;
 new Handle:g_cvarDoors_Speed_Elevator 		= INVALID_HANDLE;
 new Handle:g_cvarDoors_Speed 				= INVALID_HANDLE;
 new Handle:g_cvarDoors_Speed_Prop 			= INVALID_HANDLE;
 
-//RunTimeOptimizer
+// Console Variables: Runtime Optimizers
+new g_iPlugin_Enable 					= 1;
 new Float:g_flPlugin_Doors_Speed_Elevator 	= -1.0;
 new Float:g_flPlugin_Doors_Speed 			= -1.0;
 new Float:g_flPlugin_Doors_Speed_Prop 		= -1.0;
 
+// Timers
+
+
+// Library Load Checks
+
+
+// Game Variables
+
+
+// Map Variables
 //Doors
 enum DoorsTypeTracked {
 	
@@ -107,106 +129,96 @@ enum DoorsData {
 new Float:g_ddDoors[2048][DoorsData];
 new bool:g_bDoors_HasChangedValues = false;
 
-//Clients
-new bool:g_bShowTickRate[MAXPLAYERS+1] = {false,...};
-
-/*****************************************************************
+// Client Variables
 
 
-F O R W A R D   P U B L I C S
+// M i s c
 
 
-*****************************************************************/
-public OnPluginStart() {
-	
-	//Init for smlib
-	SMLib_OnPluginStart(PLUGIN_NAME,PLUGIN_TAG,PLUGIN_VERSION,PLUGIN_AUTHOR,PLUGIN_DESCRIPTION,PLUGIN_URL);
-	
-	//Translations (you should use it always when printing something to clients)
-	//Always with plugin. as prefix, the short name and .phrases as postfix.
-	//decl String:translationsName[PLATFORM_MAX_PATH];
-	//Format(translationsName,sizeof(translationsName),"plugin.%s.phrases",g_sPlugin_Short_Name);
-	//File_LoadTranslations(translationsName);
-	
-	//Command Hooks (AddCommandListener) (If the command already exists, like the command kill, then hook it!)
-	
-	
-	//Register New Commands (RegConsoleCmd) (If the command doesn't exist, hook it here)
-	
-	
-	//Register Admin Commands (RegAdminCmd)
-	RegAdminCmd("sm_tickrate",Command_TickRate,ADMFLAG_BAN,"enables the target to see the current tickrate at top left corner");
-	
-	//Cvars: Create a global handle variable.
-	//Example: g_cvarEnable = CreateConVarEx("enable","1","example ConVar");
-	g_cvarDoors_Speed_Elevator 		= CreateConVarEx("doors_speed_elevator", 	"1.05", "Sets the speed of all func_door entities used as elevators on a map.\nEx: 1.05 means +5% speed", FCVAR_PLUGIN);
-	g_cvarDoors_Speed 				= CreateConVarEx("doors_speed", 			"2.00", "Sets the speed of all func_door entities that are not elevators on a map.\nEx: 2.00 means +100% speed", FCVAR_PLUGIN);
-	g_cvarDoors_Speed_Prop			= CreateConVarEx("doors_speed_prop", 		"2.00", "Sets the speed of all prop_door entities on a map.\nEx: 2.00 means +100% speed", FCVAR_PLUGIN);
-	
-	//Event Hooks
-	HookEvent("round_start",Event_Round_Start,EventHookMode_Post);
-	
-	//Timer
-	CreateTimer(THINK_INTERVAL,Timer_Think,INVALID_HANDLE,TIMER_REPEAT);
-	
-	//Auto Config (you should always use it)
-	//Always with "plugin." prefix and the short name
-	new tick = RoundToFloor(1.0/GetTickInterval());
-	decl String:configName[MAX_PLUGIN_SHORTNAME_LENGTH+8];
-	
-	new String:path[PLATFORM_MAX_PATH];
-	Format(path,sizeof(path),"cfg/sourcemod/plugin.%s",g_sPlugin_Short_Name);
-	
-	if(!DirExists(path)){
-		
-		//0775
-		if(!CreateDirectory(path,
-			FPERM_U_READ|	FPERM_U_WRITE|	FPERM_U_EXEC|
-			FPERM_G_READ|	FPERM_G_WRITE|	FPERM_G_EXEC|
-			FPERM_O_READ|					FPERM_O_EXEC
-		)) {
-			SetFailState("directory %s is missing and can't be created.",path);
-		}
-	}
-	Format(configName,sizeof(configName),"plugin.%s/tickrate-%d",g_sPlugin_Short_Name,tick);
-	AutoExecConfig(true,configName);
-}
+/***************************************************************************************
 
-public OnPluginEnd(){
-	
-	if(g_bDoors_HasChangedValues){
-		Door_ResetSettingsAll();
-	}
-}
 
-public OnMapStart() {
-	
-	// hax against valvefail (thx psychonic for fix)
-	if(GuessSDKVersion() == SOURCE_SDK_EPISODE2VALVE){
-		SetConVarString(g_cvarVersion, PLUGIN_VERSION);
-	}
-	
-	Door_ClearSettingsAll();
-}
+	F O R W A R D   P U B L I C S
 
-public OnConfigsExecuted(){
+
+***************************************************************************************/
+public OnPluginStart()
+{
+	// Initialization for SMLib (don't execute AutoConfig, since we handle it in AutoConfigManagement)
+	PluginManager_Initialize("tickxmapfix", "[SM] ", false, false);
+	AutoConfigManagement();
 	
-	//Set your ConVar runtime optimizers here
-	//Example: g_iPlugin_Enable = GetConVarInt(g_cvarEnable);
-	g_flPlugin_Doors_Speed_Elevator 	= GetConVarFloat(g_cvarDoors_Speed_Elevator);
-	g_flPlugin_Doors_Speed 				= GetConVarFloat(g_cvarDoors_Speed);
-	g_flPlugin_Doors_Speed_Prop 		= GetConVarFloat(g_cvarDoors_Speed_Prop);
+	// Translations
+	// LoadTranslations("common.phrases");
 	
-	//Hook ConVar Change
+	
+	// Command Hooks (AddCommandListener) (If the command already exists, like the command kill, then hook it!)
+	
+	
+	// Register New Commands (PluginManager_RegConsoleCmd) (If the command doesn't exist, hook it here)
+	
+	
+	// Register Admin Commands (PluginManager_RegAdminCmd)
+	
+
+	// Cvars: Create a global handle variable.
+	g_cvarEnable = PluginManager_CreateConVar("enable", "1", "Enables or disables this plugin");
+	g_cvarDoors_Speed_Elevator 		= PluginManager_CreateConVar("doors_speed_elevator", 	"1.05", "Sets the speed of all func_door entities used as elevators on a map.\nEx: 1.05 means +5% speed", FCVAR_PLUGIN);
+	g_cvarDoors_Speed 				= PluginManager_CreateConVar("doors_speed", 			"2.00", "Sets the speed of all func_door entities that are not elevators on a map.\nEx: 2.00 means +100% speed", FCVAR_PLUGIN);
+	g_cvarDoors_Speed_Prop			= PluginManager_CreateConVar("doors_speed_prop", 		"2.00", "Sets the speed of all prop_door entities on a map.\nEx: 2.00 means +100% speed", FCVAR_PLUGIN);
+	
+	
+	// Hook ConVar Change
+	HookConVarChange(g_cvarEnable, ConVarChange_Enable);
 	HookConVarChange(g_cvarEnable,					ConVarChange_Enable);
 	HookConVarChange(g_cvarDoors_Speed_Elevator,	ConVarChange_Doors_Speed_Elevator);
 	HookConVarChange(g_cvarDoors_Speed,				ConVarChange_Doors_Speed);
 	HookConVarChange(g_cvarDoors_Speed_Prop,		ConVarChange_Doors_Speed_Prop);
 	
-	//Mind: this is only here for late load, since on map change or server start, there isn't any client.
-	//Remove it if you don't need it.
-	Client_InitializeAll();
+	// Event Hooks
+	HookEvent("round_start",Event_Round_Start,EventHookMode_Post);
 	
+	// Library
+	
+	
+	/* Features
+	if(CanTestFeatures()){
+		
+	}
+	*/
+	
+	// Create ADT Arrays
+	
+	
+	// Timers
+	
+}
+
+public OnPluginEnd()
+{
+	if(g_bDoors_HasChangedValues){
+		Door_ResetSettingsAll();
+	}
+}
+
+public OnMapStart()
+{
+	SetConVarString(Plugin_VersionCvar, Plugin_Version);
+	Door_ClearSettingsAll();
+}
+
+public OnConfigsExecuted()
+{
+	// Set your ConVar runtime optimizers here
+	g_iPlugin_Enable = GetConVarInt(g_cvarEnable);
+	g_flPlugin_Doors_Speed_Elevator 	= GetConVarFloat(g_cvarDoors_Speed_Elevator);
+	g_flPlugin_Doors_Speed 				= GetConVarFloat(g_cvarDoors_Speed);
+	g_flPlugin_Doors_Speed_Prop 		= GetConVarFloat(g_cvarDoors_Speed_Prop);
+	
+	// Mind: this is only here for late load, since on map change or server start, there isn't any client.
+	// Remove it if you don't need it.
+	Client_InitializeAll();
+
 	if(g_iPlugin_Enable != 0){
 		
 		Door_GetSettingsAll();
@@ -214,28 +226,29 @@ public OnConfigsExecuted(){
 	}
 }
 
-public OnClientConnected(client){
-	
+public OnClientPutInServer(client)
+{
 	Client_Initialize(client);
 }
 
-public OnClientPostAdminCheck(client){
-	
+public OnClientPostAdminCheck(client)
+{
 	Client_Initialize(client);
 }
 
-/****************************************************************
+/**************************************************************************************
 
 
-C A L L B A C K   F U N C T I O N S
+	C A L L B A C K   F U N C T I O N S
 
 
-****************************************************************/
-/****************************************************************
+**************************************************************************************/
+/**************************************************************************************
 
-C O N V A R C H A N G E S
+	C O N  V A R  C H A N G E
 
-****************************************************************/
+**************************************************************************************/
+/* Example Callback Con Var Change*/
 public ConVarChange_Enable(Handle:cvar, const String:szOldVal[], const String:szNewVal[]){
 	
 	new oldVal = StringToInt(szOldVal);
@@ -285,11 +298,16 @@ public ConVarChange_Doors_Speed_Prop(Handle:cvar, const String:oldVal[], const S
 	}
 }
 
-/****************************************************************
+/**************************************************************************************
 
-E V E N T S
+	C O M M A N D S
 
-****************************************************************/
+**************************************************************************************/
+/**************************************************************************************
+
+	E V E N T S
+
+**************************************************************************************/
 public Action:Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast){
 	
 	if(g_iPlugin_Enable != 0){
@@ -300,136 +318,38 @@ public Action:Event_Round_Start(Handle:event, const String:name[], bool:dontBroa
 	}
 	return Plugin_Continue;
 }
-/****************************************************************
 
-T I M E R
+/***************************************************************************************
 
-****************************************************************/
-public Action:Timer_Think(Handle:timer){
-	
-	if(g_iPlugin_Enable == 0){
-		return Plugin_Continue;
-	}
-	
-	new Float:tickInterval = GetTickInterval();
-	new Float:tickRate = -1.0;
-	new color[3];
-	new alpha = 235;
-	
-	if(0.0 < tickInterval){
-		tickRate = 1.0/tickInterval;
-		Color_GetByValueBorders(tickRate,color);
-	}
-	
-	LOOP_CLIENTS(client,CLIENTFILTER_INGAMEAUTH){
-		
-		if(!g_bShowTickRate[client]){
-			continue;
-		}
-		
-		if(tickRate == -1.0){
-			
-			Client_PrintToTop(client,255,255,255,255,THINK_INTERVAL,"%sN/A",TOP_PRE_TICKRATE_TEXT);
-			continue;
-		}
-		
-		Client_PrintToTop(client,color[0],color[1],color[2],alpha,THINK_INTERVAL,"%s%f",TOP_PRE_TICKRATE_TEXT,tickRate,THINK_INTERVAL,GetTime());
-	}
-	
-	return Plugin_Continue;
-}
 
-/****************************************************************
+	P L U G I N   F U N C T I O N S
 
-C O M M A N D S
 
-****************************************************************/
-public Action:Command_TickRate(client,args){
+***************************************************************************************/
+AutoConfigManagement()
+{
+	//Auto Config (you should always use it)
+	//Always with "plugin." prefix and the short name
+	new tick = RoundToFloor(1.0/GetTickInterval());
 	
-	decl String:target[MAX_TARGET_LENGTH];
-	GetCmdArg(1, target, sizeof(target));
-	decl String:arg2[11];
-	GetCmdArg(2, arg2, sizeof(arg2));
-	new bool:newState = bool:StringToInt(arg2);
+	new String:path[PLATFORM_MAX_PATH];
+	Format(path,sizeof(path),"cfg/sourcemod/tickxmapfix");
 	
-	decl String:target_name[MAX_TARGET_LENGTH];
-	decl target_list[MAXPLAYERS+1];
-	decl bool:tn_is_ml;
-	
-	new target_count = 0;
-	
-	if(args == 2){
+	if(!DirExists(path)){
 		
-		target_count = ProcessTargetString(
-		target,
-		client,
-		target_list,
-		sizeof(target_list),
-		COMMAND_FILTER_NO_BOTS,
-		target_name,
-		sizeof(target_name),
-		tn_is_ml
-		);
-		
-		if (target_count <= 0) {
-			ReplyToTargetError(client, target_count);
-			return Plugin_Handled;
+		//0775
+		if(!CreateDirectory(path,
+			FPERM_U_READ|	FPERM_U_WRITE|	FPERM_U_EXEC|
+			FPERM_G_READ|	FPERM_G_WRITE|	FPERM_G_EXEC|
+			FPERM_O_READ|					FPERM_O_EXEC
+		)) {
+			SetFailState("directory %s is missing and can't be created.",path);
 		}
 	}
-	else if(args == 0){
-		
-		target_count=1;
-		target_list[0] = client;
-		newState = !g_bShowTickRate[client];
-	}
-	else {
-		
-		new String:command[64];
-		GetCmdArg(0,command,sizeof(command));
-		Client_Reply(client,"%sUsage: %s [<target> <0/1>]",PLUGIN_PRINT_PREFIX,command);
-	}
-	
-	for (new i=0;i<target_count;i++) {
-		
-		g_bShowTickRate[target_list[i]] = newState;
-		
-		if(newState){
-			
-			Client_PrintToChat(target_list[i],true,"[%s] Live tickrate viewer enabled - refresh rate: %f seconds",PLUGIN_NAME,THINK_INTERVAL);
-		}
-		else {
-			
-			Client_PrintToChat(target_list[i],true,"[%s] Live tickrate viewer disabled",PLUGIN_NAME);
-		}
-	}
-	
-	if(target_count > 1){
-		
-		if(newState){
-			
-			Client_PrintToChat(client,true,"[%s] You've enabled tickrate viewer for %s which affected %d players.",PLUGIN_NAME,target,target_count);
-		}
-		else {
-			
-			Client_PrintToChat(client,true,"[%s] You've disabled tickrate viewer for %s which affected %d players.",PLUGIN_NAME,target,target_count);
-		}
-	}
-	return Plugin_Handled;
-}
 
-/*****************************************************************
-
-
-P L U G I N   F U N C T I O N S
-
-
-*****************************************************************/
-
-stock Color_GetByTickrate(const Float:tickrate, color[3]){
-	
-	color[0] = Math_Clamp(-7.7272727*tickrate+510,0,255);
-	color[1] = Math_Clamp(-15.4545454*tickrate+1275,0,255);
-	color[2] = Math_Clamp(14.5714285*tickrate-1202.1428570,0,255);
+	decl String:configName[PLATFORM_MAX_PATH];
+	Format(configName,sizeof(configName),"tickxmapfix/tickrate-%d",tick);
+	AutoExecConfig(true,configName);
 }
 
 Door_SetSettingsAll(){
@@ -449,8 +369,6 @@ Door_SetSettingsAll(){
 		
 		entity = -1;
 	}
-	
-	Server_PrintDebug("[%s] Affected %d doors",PLUGIN_NAME,countEnts);
 }
 
 Door_SetSettings(entity){
@@ -496,8 +414,6 @@ Door_ResetSettingsAll(){
 		
 		entity = -1;
 	}
-	
-	Server_PrintDebug("[%s] Affected %d doors",PLUGIN_NAME,countEnts);
 }
 
 Door_ResetSettings(entity){
@@ -571,38 +487,37 @@ Door_ClearSettingsAll(){
 	}
 }
 
+/***************************************************************************************
 
-stock Client_InitializeAll(){
-	
-	for(new client=1;client<=MaxClients;client++){
-		
-		if(!IsClientInGame(client)){
-			continue;
-		}
+	S T O C K
+
+***************************************************************************************/
+stock Client_InitializeAll()
+{
+	LOOP_CLIENTS (client, CLIENTFILTER_ALL) {
 		
 		Client_Initialize(client);
 	}
 }
 
-stock Client_Initialize(client){
-	
-	//Variables
+stock Client_Initialize(client)
+{
+	// Variables
 	Client_InitializeVariables(client);
 	
 	
-	//Functions
+	// Functions
 	
 	
-	//Functions where the player needs to be in game
+	/* Functions where the player needs to be in game 
 	if(!IsClientInGame(client)){
 		return;
 	}
+	*/
 }
 
-stock Client_InitializeVariables(client){
-	
-	//Plugin Client Vars
-	g_bShowTickRate[client] = false;
+stock Client_InitializeVariables(client)
+{
+	// Client Variables
 }
-
 
