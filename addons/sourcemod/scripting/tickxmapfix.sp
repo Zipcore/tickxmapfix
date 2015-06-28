@@ -51,7 +51,7 @@ public Plugin:myinfo = {
 	name 						= "Tick X Map Fix",
 	author 						= "Chanz",
 	description 				= "This is a SourceMod plugin, it improves maps which are made only for tick 66 servers to work better on servers with a differnt tickrate",
-	version 					= "3.0",
+	version 					= "3.1",
 	url 						= "http://forums.alliedmods.net/showthread.php?p=1528146"
 }
 
